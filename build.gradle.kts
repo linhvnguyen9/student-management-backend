@@ -17,6 +17,7 @@ repositories {
 }
 
 dependencies {
+    val ktor_version = "1.5.4"
     implementation("io.ktor:ktor-server-core:1.5.4")
     implementation("io.ktor:ktor-server-netty:1.5.4")
     implementation("ch.qos.logback:logback-classic:1.2.3")
@@ -25,6 +26,8 @@ dependencies {
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.6.0")
+
+    implementation("io.ktor:ktor-gson:$ktor_version")
 }
 
 tasks.test {
