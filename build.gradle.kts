@@ -21,7 +21,18 @@ dependencies {
     implementation("io.ktor:ktor-server-core:1.5.4")
     implementation("io.ktor:ktor-server-netty:1.5.4")
     implementation("ch.qos.logback:logback-classic:1.2.3")
+
     implementation("com.google.firebase:firebase-admin:7.2.0")
+
+    val exposedVersion: String by project
+    dependencies {
+        implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
+        implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
+        implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+        implementation("org.jetbrains.exposed:exposed-java-time:${exposedVersion}")
+        implementation("mysql:mysql-connector-java:5.1.48")
+    }
+
 
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
