@@ -29,7 +29,7 @@ fun main() {
     initFirebase()
     initDb()
 
-    embeddedServer(Netty, port = 8000) {
+    embeddedServer(Netty, port = 8080) {
         install(ContentNegotiation) {
             gson()
         }
@@ -81,11 +81,11 @@ fun main() {
                 }
             }
             route("/announcements") {
-                get("/") {
+                get("") {
                     val announcements = getAllAnnouncements()
                     call.respond(announcements.map { it.toDomain() })
                 }
-                post("/") {
+                post("") {
                     val announcementRequest = call.receive<AddAnnouncementRequest>()
                     saveAnnouncement(announcementRequest.toAnnouncement())
                 }
