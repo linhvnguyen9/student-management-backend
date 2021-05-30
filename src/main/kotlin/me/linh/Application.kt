@@ -4,6 +4,8 @@ import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.messaging.MulticastMessage
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.gson.*
@@ -15,15 +17,19 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import me.linh.data.AnnouncementLocal
 import me.linh.data.Announcements
+import me.linh.data.ScheduleLocal
+import me.linh.data.Schedules
 import me.linh.domain.Announcement
+import me.linh.domain.Schedule
 import me.linh.domain.User
 import me.linh.remote.AddAnnouncementRequest
+import me.linh.remote.AddScheduleRequest
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.FileInputStream
 import java.time.LocalDateTime
 import java.util.*
-import kotlin.collections.HashMap
+
 
 fun main() {
     initFirebase()
@@ -90,6 +96,33 @@ fun main() {
                     saveAnnouncement(announcementRequest.toAnnouncement())
                 }
             }
+            route("/schedule") {
+                get("") {
+                    val schedule = getAllSchedule()
+                    call.respond(schedule.map {it.toDomain()})
+                }
+                post(""){
+                    val request = call.receive<AddScheduleRequest>()
+                    saveSchedule(request.toSchedule())
+
+                    val registrationTokens = listOf(
+                        "c4Ufvmd0ThKzpVucJenDZ3:APA91bHOtVt2rmhIipbGgC0F7VG7fe8W9IWcogdybf68-wM-9K8pCDIbOSCevou4r8UeGsh8Z0eUn9nNzzJ3xLKh26LVDN_wAU2qeBssTEue4zDK03mS6GG_VGsSMT1PBDNC0h8DOszw",  // ...
+                    )
+
+                    val message = MulticastMessage.builder()
+                        .putData("name", request.name)
+                        .putData("type", request.type)
+                        .putData("timestamp", request.timestamp.toString())
+                        .putData("isCancelled", request.isCancelled.toString())
+                        .putData("roomName", request.roomName)
+                        .putData("teacherName", request.teacherName)
+                        .addAllTokens(registrationTokens)
+                        .build()
+
+                    val response = FirebaseMessaging.getInstance().sendMulticast(message)
+                    println(response.successCount.toString() + " messages were sent successfully")
+                }
+            }
         }
     }.start(wait = true)
 }
@@ -114,6 +147,7 @@ private fun initDb() {
 
     transaction {
         SchemaUtils.create(Announcements)
+        SchemaUtils.create(Schedules)
     }
 }
 
@@ -162,6 +196,28 @@ private fun saveAnnouncement(announcement: Announcement) {
             title = announcement.title
             content = announcement.content
             timestamp = LocalDateTime.ofInstant(Calendar.getInstance().apply { timeInMillis = announcement.timestamp }.toInstant(), Calendar.getInstance().timeZone.toZoneId())
+        }
+    }
+}
+
+private fun getAllSchedule(): List<ScheduleLocal> =
+    transaction {
+        addLogger(StdOutSqlLogger)
+
+        ScheduleLocal.all().orderBy(Schedules.timestamp to SortOrder.ASC).toList()
+    }
+
+private fun saveSchedule(schedule: Schedule) {
+    transaction {
+        addLogger(StdOutSqlLogger)
+
+        ScheduleLocal.new {
+            name = schedule.name
+            type = schedule.type
+            timestamp = LocalDateTime.ofInstant(Calendar.getInstance().apply { timeInMillis = schedule.timestamp }.toInstant(), Calendar.getInstance().timeZone.toZoneId())
+            isCancelled = schedule.isCancelled
+            roomName = schedule.roomName
+            teacherName = schedule.teacherName
         }
     }
 }
