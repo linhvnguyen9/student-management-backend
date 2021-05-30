@@ -4,49 +4,32 @@ import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.gson.*
 import io.ktor.http.*
+import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import me.linh.data.AnnouncementLocal
+import me.linh.data.Announcements
+import me.linh.domain.Announcement
 import me.linh.domain.User
+import me.linh.remote.AddAnnouncementRequest
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.FileInputStream
+import java.time.LocalDateTime
+import java.util.*
+import kotlin.collections.HashMap
 
 fun main() {
     initFirebase()
+    initDb()
 
-    println(FirebaseDatabase.getInstance().reference.child("chats").child("MlmPryFEX5N0TrYjZ14xOexygtM2").addValueEventListener(object : ValueEventListener {
-        override fun onDataChange(snapshot: DataSnapshot?) {
-            println("========================================================")
-            println(snapshot)
-            println("========================================================")
-        }
-
-        override fun onCancelled(error: DatabaseError?) {
-            println("db error")
-        }
-    }))
-
-    println(FirebaseDatabase.getInstance().reference.child("chats").child("").addValueEventListener(object : ValueEventListener {
-        override fun onDataChange(snapshot: DataSnapshot?) {
-            println("========================================================")
-            println(snapshot)
-            println("========================================================")
-        }
-
-        override fun onCancelled(error: DatabaseError?) {
-            println("db error")
-        }
-    }))
-
-    embeddedServer(Netty, port = 8000) {
+    embeddedServer(Netty, port = 8080) {
         install(ContentNegotiation) {
             gson()
         }
@@ -97,12 +80,23 @@ fun main() {
                     call.respond(status = HttpStatusCode.OK, users)
                 }
             }
+            route("/announcements") {
+                get("") {
+                    val announcements = getAllAnnouncements()
+                    call.respond(announcements.map { it.toDomain() })
+                }
+                post("") {
+                    val announcementRequest = call.receive<AddAnnouncementRequest>()
+                    saveAnnouncement(announcementRequest.toAnnouncement())
+                }
+            }
         }
     }.start(wait = true)
 }
 
 private fun initFirebase() {
-    val serviceAccount = FileInputStream(System.getProperty("user.dir") + "/" + "src/main/resources/student-management-5792a-firebase-adminsdk-pgu7w-7e07c84619.json")
+    val serviceAccount =
+        FileInputStream(System.getProperty("user.dir") + "/" + "src/main/resources/student-management-5792a-firebase-adminsdk-pgu7w-7e07c84619.json")
 
     val options = FirebaseOptions.builder()
         .setCredentials(GoogleCredentials.fromStream(serviceAccount))
@@ -110,6 +104,17 @@ private fun initFirebase() {
         .build()
 
     FirebaseApp.initializeApp(options)
+}
+
+private fun initDb() {
+    val db = Database.connect(
+        "jdbc:mysql://localhost:3306/${System.getenv("DB_NAME")}", driver = "com.mysql.jdbc.Driver",
+        user = System.getenv("DB_USER"), password = System.getenv("DB_PASSWORD")
+    )
+
+    transaction {
+        SchemaUtils.create(Announcements)
+    }
 }
 
 private fun registerAdmin(uid: String) {
@@ -124,7 +129,7 @@ private fun deregisterAdmin(uid: String) {
     FirebaseAuth.getInstance().setCustomUserClaims(uid, claims)
 }
 
-private fun getUserClaims(uid: String) : Set<*> {
+private fun getUserClaims(uid: String): Set<*> {
     val user = FirebaseAuth.getInstance().getUser(uid)
     return user.customClaims.entries
 }
@@ -139,4 +144,24 @@ private fun getAllUsers(): List<User> {
         page = page.nextPage
     }
     return users
+}
+
+private fun getAllAnnouncements(): List<AnnouncementLocal> =
+    transaction {
+        addLogger(StdOutSqlLogger)
+
+        AnnouncementLocal.all().toList()
+    }
+
+private fun saveAnnouncement(announcement: Announcement) {
+    transaction {
+        addLogger(StdOutSqlLogger)
+
+        AnnouncementLocal.new {
+            imageUrl = announcement.imageUrl
+            title = announcement.title
+            content = announcement.content
+            timestamp = LocalDateTime.ofInstant(Calendar.getInstance().apply { timeInMillis = announcement.timestamp }.toInstant(), Calendar.getInstance().timeZone.toZoneId())
+        }
+    }
 }
